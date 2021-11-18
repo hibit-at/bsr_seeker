@@ -1,13 +1,20 @@
 import json
 from collections import defaultdict
-from numpy.lib.function_base import disp
+from numpy.lib.function_base import disp, sort_complex
 import requests
 import re
 import math
 from PIL import Image, ImageDraw, ImageFont
 import base64
 from io import BytesIO
-import numpy as np
+import numpy as np  
+from copy import deepcopy
+
+
+# hyper parameter
+
+start = '17000'
+end = '1c000'
 
 # debug
 
@@ -25,24 +32,6 @@ def json_tree(data, indent=0):
     return
 
 
-sample = json.loads(open('sample.bplist', 'r').read())
-
-# hyper parameter
-
-start = '1a000'
-end = '1b000'
-
-end_num = int(end, 16)
-manu_range = 0
-start_num = int(start, 16)
-if manu_range > 0:
-    start_num = end-manu_range
-
-log_path = 'search_log.txt'
-
-queue_nps = defaultdict(list)
-
-
 def pil_to_base64(img, format="PNG"):
     buffer = BytesIO()
     img.save(buffer, format)
@@ -50,10 +39,10 @@ def pil_to_base64(img, format="PNG"):
     return img_str
 
 
-def text_over(img, text, height):
+def text_over(img, text, height, text_color):
     ttfontname = "C:\\Windows\\Fonts\\meiryob.ttc"
     fontsize = 50
-    textRGB = (255, 255, 255)
+    textRGB = text_color
     draw = ImageDraw.Draw(img)
     font = ImageFont.truetype(ttfontname, fontsize)
     textTopLeft = (10, height)
@@ -62,12 +51,29 @@ def text_over(img, text, height):
 
 def make_cover(nps, start, end):
     canvasSize = (256, 256)
+    green = 0
+    if nps < 6:
+        green = min(nps*255/3,255)
+    else:
+        green = -255/3*(nps-9)
+        green = min(green,255)
+        green = max(green,0)
+    red = 255/3*(nps-3)
+    red = min(red,255)
+    red = max(red, 0)
+    blue = (nps-9)*255/3
+    blue = min(blue,255)
+    blue = max(blue,0)
+    red = int(red)
+    blue = int(blue)
+    green = int(green)
     backgroundRGB = (0, 0, 0)
+    text_color = (red,green,blue)
     img = Image.new('RGB', canvasSize, backgroundRGB)
-    text_over(img, f'NPS:{nps}', 20)
-    text_over(img, f'{start}~', 100)
-    text_over(img, end, 180)
-    img.save(f'nps{nps}_{start}~{end}.png')
+    text_over(img, f'NPS:{nps}', 20, text_color)
+    text_over(img, f'{start}~', 100, text_color)
+    text_over(img, end, 180, text_color)
+    img.save(f'cover_nps{nps}_{start}~{end}.png')
     img_base = pil_to_base64(img)
     return img_base
 
@@ -87,26 +93,39 @@ def create_bpl(nps, queue):
     while len(queue):
         q = queue.pop()
         hash = q['hash']
+        print(hash)
         chara = q['chara']
         diff_name = q['diff_name']
         append_json = {}
         append_json['hash'] = hash
-        append_json['difficulties'] = {}
-        append_json['difficulties']['characteristic'] = chara
-        append_json['difficulties']['name'] = diff_name
+        append_json['difficulties'] = [{}]
+        append_json['difficulties'][0]['characteristic'] = chara
+        append_json['difficulties'][0]['name'] = diff_name
         j['songs'].append(append_json)
+
+
     json.dump(j,open(f'{bpl_title}.json','w'))
     print('created!')
 
 
 def queue_check(queue_list):
-    for item in queue_list.items():
+    for item in sorted(queue_list.items(), key=lambda x : x[0]):
         print('nps', item[0], 'length', len(item[1]))
-    for item in queue_list.items():
+    for item in sorted(queue_list.items(), key=lambda x : x[0]):
         nps = item[0]
         queue = item[1]
-        if len(queue) >= 2:
+        if len(queue) >= 10:
             create_bpl(nps, queue)
+
+
+
+end_num = int(end, 16)
+manu_range = 0
+start_num = int(start, 16)
+if manu_range > 0:
+    start_num = end-manu_range
+log_path = 'search_log.txt'
+queue_nps = defaultdict(list)
 
 
 for i in range(start_num, end_num):
@@ -133,10 +152,6 @@ for i in range(start_num, end_num):
             chara = diff['characteristic']
             print(diff_name, nps)
             proc_nps = math.floor(nps)
-            if proc_nps <= 3:
-                proc_nps = 3
-            if proc_nps >= 10:
-                proc_nps = 10
             print(proc_nps)
             if proc_count[proc_nps] > 0:
                 print('this range of nps has been already taken!')
@@ -149,5 +164,12 @@ for i in range(start_num, end_num):
                 'diff_name': diff_name,
                 'bsr_key': bsr_key,
             }
-            queue_nps[proc_nps].append(append_dict)
-            queue_check(queue_nps)
+        queue_nps[proc_nps].append(append_dict)
+        queue_check(queue_nps)
+
+# queueの後処理
+
+for item in queue_nps.items():
+    nps = item[0]
+    queue = item[1]
+    create_bpl(nps, queue)
