@@ -1,19 +1,16 @@
 import json
 from collections import defaultdict
-from numpy.lib.function_base import disp, sort_complex
 import requests
 import re
 import math
 from PIL import Image, ImageDraw, ImageFont
 import base64
 from io import BytesIO
-import numpy as np  
-from copy import deepcopy
 
 
 # hyper parameter
 
-start = '17000'
+start = '10000'
 end = '1c000'
 
 # debug
@@ -79,6 +76,8 @@ def make_cover(nps, start, end):
 
 
 def create_bpl(nps, queue):
+    if len(queue) == 0:
+        return
     start = queue[0]['bsr_key']
     end = queue[-1]['bsr_key']
     print(start, end)
@@ -102,20 +101,17 @@ def create_bpl(nps, queue):
         append_json['difficulties'][0]['characteristic'] = chara
         append_json['difficulties'][0]['name'] = diff_name
         j['songs'].append(append_json)
-
-
     json.dump(j,open(f'{bpl_title}.json','w'))
-    print('created!')
 
 
 def queue_check(queue_list):
     for item in sorted(queue_list.items(), key=lambda x : x[0]):
         print('nps', item[0], 'length', len(item[1]))
-    for item in sorted(queue_list.items(), key=lambda x : x[0]):
         nps = item[0]
         queue = item[1]
         if len(queue) >= 10:
             create_bpl(nps, queue)
+            print('created!')
 
 
 
@@ -150,14 +146,15 @@ for i in range(start_num, end_num):
             diff_name = diff['difficulty']
             nps = diff['nps']
             chara = diff['characteristic']
-            print(diff_name, nps)
-            proc_nps = math.floor(nps)
-            print(proc_nps)
-            if proc_count[proc_nps] > 0:
-                print('this range of nps has been already taken!')
+            if chara != 'Standard':
                 continue
+            proc_nps = math.floor(nps)
+            if proc_count[proc_nps] > 0:
+                print(f'  {diff_name}({chara}) found but {proc_nps} has been taken...')
+                continue
+            else:
+                print(f'  {diff_name}({chara}) added as nps level {proc_nps}!')
             proc_count[proc_nps] += 1
-            # append_tuple = (hash, chara, diff_name, bsr_key)
             append_dict = {
                 'hash': hash,
                 'chara': chara,
